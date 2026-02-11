@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { sendNotifyEmail } from "@/lib/email"
 
 function isEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -54,6 +55,19 @@ export async function POST(req: Request) {
 
     if (error) {
       return NextResponse.json({ error: "Failed to submit request" }, { status: 500 })
+    }
+
+    // ✅ Email notification (won't block if it fails)
+    try {
+      await sendNotifyEmail(
+        "New artwork purchase request",
+        `<p><b>Artwork:</b> ${artwork.title}</p>
+         <p><b>Name:</b> ${buyerName}</p>
+         <p><b>Email:</b> ${buyerEmail}</p>
+         <p><b>Message:</b><br/>${message.replace(/\n/g, "<br/>")}</p>`
+      )
+    } catch (e) {
+      console.error("Email notify failed:", e)
     }
 
     return NextResponse.json({ ok: true })
