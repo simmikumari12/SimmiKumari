@@ -16,6 +16,14 @@ export function Artwork() {
   const [selectedArtwork, setSelectedArtwork] = useState<(typeof artworks)[0] | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  // Form state for purchase request modal
+  const [buyerName, setBuyerName] = useState("")
+  const [buyerEmail, setBuyerEmail] = useState("")
+  const [buyerMessage, setBuyerMessage] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+
   const artworks = [
     {
       title: "Mandala Love",
@@ -72,7 +80,6 @@ export function Artwork() {
       price: "",
     },
   ]
-  // </CHANGE>
 
   const scroll = (direction: "left" | "right") => {
     if (scrollContainerRef.current) {
@@ -86,19 +93,72 @@ export function Artwork() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    alert("Thank you for your interest! I'll get back to you soon.")
+  const closeModal = () => {
     setIsModalOpen(false)
     setSelectedArtwork(null)
+
+    // reset modal state
+    setBuyerName("")
+    setBuyerEmail("")
+    setBuyerMessage("")
+    setError("")
+    setSuccess(false)
+    setLoading(false)
   }
-  // </CHANGE>
 
   const handlePurchaseClick = (artwork: (typeof artworks)[0]) => {
     setSelectedArtwork(artwork)
     setIsModalOpen(true)
+
+    // reset status when opening
+    setError("")
+    setSuccess(false)
   }
-  // </CHANGE>
+
+  // Submit purchase request -> server route -> Supabase
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedArtwork) return
+
+    setLoading(true)
+    setError("")
+    setSuccess(false)
+
+    try {
+      const res = await fetch("/api/purchase-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artworkTitle: selectedArtwork.title,
+          name: buyerName,
+          email: buyerEmail,
+          message: buyerMessage,
+          company: "", // honeypot
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setError(data?.error ?? "Something went wrong. Please try again.")
+        return
+      }
+
+      setSuccess(true)
+      setBuyerName("")
+      setBuyerEmail("")
+      setBuyerMessage("")
+
+      // Close after a short moment (keeps UX nice)
+      setTimeout(() => {
+        closeModal()
+      }, 800)
+    } catch {
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <section id="artwork" className="py-12 md:py-16 px-6 lg:px-8 bg-muted/30">
@@ -152,16 +212,8 @@ export function Artwork() {
                   className="flex-shrink-0 w-80 snap-center"
                 >
                   <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-border/50 hover:border-primary/50 h-full">
-                    <div
-                      className="relative w-full aspect-square cursor-pointer"
-                      onClick={() => handlePurchaseClick(artwork)}
-                    >
-                      <Image
-                        src={artwork.images[0] || "/placeholder.svg"}
-                        alt={artwork.title}
-                        fill
-                        className="object-cover"
-                      />
+                    <div className="relative w-full aspect-square cursor-pointer" onClick={() => handlePurchaseClick(artwork)}>
+                      <Image src={artwork.images[0] || "/placeholder.svg"} alt={artwork.title} fill className="object-cover" />
                     </div>
                     <div className="p-4">
                       <h3 className="text-sm font-semibold text-foreground mb-1">{artwork.title}</h3>
@@ -172,7 +224,6 @@ export function Artwork() {
                         </Button>
                         <p className="text-xs text-muted-foreground text-center">Digital copy only</p>
                         <p className="text-lg font-bold text-primary text-center">{artwork.price}</p>
-                        {/* </CHANGE> */}
                       </div>
                     </div>
                   </Card>
@@ -187,53 +238,74 @@ export function Artwork() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto relative">
             <button
-              onClick={() => {
-                setIsModalOpen(false)
-                setSelectedArtwork(null)
-              }}
+              onClick={closeModal}
               className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center hover:bg-background transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
+
             <div className="p-6 space-y-4">
               <h3 className="text-2xl font-bold text-foreground">Purchase Digital Copy</h3>
+
               <div className="relative w-full aspect-square rounded-lg overflow-hidden">
-                <Image
-                  src={selectedArtwork.images[0] || "/placeholder.svg"}
-                  alt={selectedArtwork.title}
-                  fill
-                  className="object-cover"
-                />
+                <Image src={selectedArtwork.images[0] || "/placeholder.svg"} alt={selectedArtwork.title} fill className="object-cover" />
               </div>
+
               <div>
                 <p className="text-lg font-semibold text-foreground">{selectedArtwork.title}</p>
                 <p className="text-sm text-muted-foreground mb-2">{selectedArtwork.description}</p>
                 <p className="text-xl font-bold text-primary">{selectedArtwork.price}</p>
                 <p className="text-xs text-muted-foreground mt-1">Digital copy only</p>
               </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Name</label>
-                  <Input type="text" placeholder="Your name" required />
+                  <Input
+                    type="text"
+                    placeholder="Your name"
+                    required
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                  />
                 </div>
+
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Email</label>
-                  <Input type="email" placeholder="your@email.com" required />
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    required
+                    value={buyerEmail}
+                    onChange={(e) => setBuyerEmail(e.target.value)}
+                  />
                 </div>
+
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Message</label>
-                  <Textarea placeholder="Any special requests or questions?" rows={3} />
+                  <Textarea
+                    placeholder="Any special requests or questions?"
+                    rows={3}
+                    value={buyerMessage}
+                    onChange={(e) => setBuyerMessage(e.target.value)}
+                  />
                 </div>
-                <Button type="submit" className="w-full rounded-full">
-                  Submit Purchase Request
+
+                {/* honeypot */}
+                <input type="text" name="company" className="hidden" tabIndex={-1} autoComplete="off" />
+
+                <Button type="submit" className="w-full rounded-full" disabled={loading}>
+                  {loading ? "Submitting..." : "Submit Purchase Request"}
                 </Button>
+
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                {success && <p className="text-sm text-green-600">Request sent ✨</p>}
               </form>
             </div>
           </div>
         </div>
       )}
-      {/* </CHANGE> */}
     </section>
   )
 }
